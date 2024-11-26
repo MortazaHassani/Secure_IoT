@@ -1,5 +1,8 @@
 # Secure IoT Project
 
+# Hotspot
+- Move hostapd.conf to /et/hostapd.conf
+- Read guide.md
 
 # MQTT
 ## installation
@@ -7,7 +10,7 @@
 ## Setup
 - Run mosquitto MQTT Broker
 - sudo nano /etc/mosquitto/mosquitto.conf 
-- - bash allow_anonymous true
+- -  allow_anonymous true
      bind_address 0.0.0.0
 
 - Run python script
