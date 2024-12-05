@@ -13,7 +13,14 @@
 - -  allow_anonymous true
      bind_address 0.0.0.0
 
-- Run python script
+# Docker
+- ```docker-compose down```
+- ```docker-compose build --no-cache```
+- ```docker-compose up```
+
+IF now changes and just run:
+     ```docker-compose up --build```
+     
 
 ## Test
 - ```bash mosquitto_sub -t "home/test" ```

@@ -50,9 +50,11 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Connect without username and password
+    
     if (client.connect("ESP32Client")) {
       Serial.println("Connected to MQTT broker");
       client.subscribe("home/test");  // Subscribe to the topic
+      delay(1000);
     } else {
       Serial.print("Failed, rc=");
       Serial.print(client.state());
@@ -80,7 +82,6 @@ pinMode(pButton1, INPUT);
 
 void loop() {
   // put your main code here, to run repeatedly:
-
 //// Blink LED
 // digitalWrite(rLED,HIGH);
 // digitalWrite(wLED,LOW);
@@ -119,7 +120,7 @@ if (isnan(hmdt) || isnan(tmpr)) {
   }
 
 float hic = dht.computeHeatIndex(tmpr, hmdt, false); // Compute heat index in Celsius (isFahreheit = false)
-
+  
   // Serial.print(F("Humidity: "));
   // Serial.print(hmdt);
   // Serial.print(F("%  Temperature: "));
@@ -134,10 +135,12 @@ if (!client.connected()) {
     reconnect();
   }
   client.loop();
-
+  
   // Publish a message to the topic every 5 seconds
   String message = "Humidity: " + String(hmdt) + "  Temperature: " + String(tmpr) + " Heat index: " + String(hic) + "\n";
   client.publish("home/test", message.c_str());
-
-  delay(5000);
+  digitalWrite(wLED,HIGH);
+  delay(500);
+  digitalWrite(wLED,LOW);
+  delay(4000);
 }
