@@ -1,8 +1,8 @@
 from flask import Flask, render_template, jsonify
 from flask_mqtt import Mqtt
-import threading
 from collections import deque
 import requests
+from decryption_algo import decrypt_msg  # Import the decrypt_msg function
 
 app = Flask(__name__)
 
@@ -16,12 +16,12 @@ app.config['MQTT_REFRESH_TIME'] = 1.0  # seconds
 
 mqtt = Mqtt(app)
 
-# Store sensor data
-sensor_data = deque(maxlen=100)
+# Store sensor data for each device
+sensor_data_device_1 = deque(maxlen=100)
+sensor_data_device_2 = deque(maxlen=100)
 
-# Telegram Bot Configuration
-#TELEGRAM_BOT_TOKEN = "your-telegram-bot-token"
-#TELEGRAM_CHAT_ID = "your-chat-id"
+TELEGRAM_BOT_TOKEN = 'your_telegram_bot_token'
+TELEGRAM_CHAT_ID = 'your_telegram_chat_id'
 
 @app.route('/')
 def index():
@@ -29,26 +29,43 @@ def index():
 
 @app.route('/data')
 def data():
-    return jsonify(list(sensor_data))
+    return jsonify({
+        'device_1': list(sensor_data_device_1),
+        'device_2': list(sensor_data_device_2)
+    })
 
 @mqtt.on_connect()
 def handle_connect(client, userdata, flags, rc):
-    print("Connected to MQTT broker")  # Debugging line
-    mqtt.subscribe('sensor/data')
+    if rc == 0:
+        print("Connected to MQTT broker")
+        mqtt.subscribe('sensor/data')
+    else:
+        print(f"Failed to connect to MQTT broker, return code {rc}")
+        send_telegram_alert(f"Failed to connect to MQTT broker, return code {rc}")
 
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
     payload = message.payload.decode('utf-8')
     print(f"Received payload: {payload}")  # Debugging line
-    try:
-        sensor_data.append(float(payload))
-        print(f"Appended data: {float(payload)}")  # Debugging line
-    except ValueError as e:
-        print(f"Error converting payload to float: {e}")
 
-    # Send Telegram alert if a condition is met
-    #if float(payload) > 50:  # Example threshold
-        #send_telegram_alert(f"Sensor value high: {payload}")
+    try:
+        # Decrypt the payload
+        decrypted_payload = decrypt_msg(payload)
+        print(f"Decrypted payload: {decrypted_payload}")  # Debugging line
+
+        # Determine the device and append to the corresponding deque
+        if 'Device 1' in decrypted_payload:
+            sensor_data_device_1.append(decrypted_payload)
+        elif 'Device 2' in decrypted_payload:
+            sensor_data_device_2.append(decrypted_payload)
+        print(f"Appended data: {decrypted_payload}")  # Debugging line
+
+    except ValueError as e:
+        print(f"Error processing payload: {e}")
+        send_telegram_alert(f"Error processing payload: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        send_telegram_alert(f"Unexpected error: {e}")
 
 def send_telegram_alert(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"

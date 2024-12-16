@@ -5,6 +5,15 @@ WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
+# Make port 5000 available to the world outside this container
+EXPOSE 5000
+
 COPY . .
 
-CMD ["python", "app.py"]
+# Define environment variable
+ENV FLASK_APP=app.py
+
+# Run app.py when the container launches
+CMD ["flask", "run", "--host=0.0.0.0"]
+
+#CMD ["python", "app.py"]

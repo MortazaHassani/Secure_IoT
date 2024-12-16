@@ -1,55 +1,162 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Sensor Data</title>
+    <title>ESP32 Sensor Data Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+
+        header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        main {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
+        }
+	p {
+	    font-weight: bold;
+	}
+        .chart-container {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 600px;
+            transition: 500ms;
+        }
+
+        .chart-container h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+            text-align: center;
+            color: #333;
+        }
+        .chart-container:hover {
+            cursor: pointer;
+            transform: translate(10px, -10px);
+            box-shadow: 0 15px 17px rgba(0, 0, 0, 0.1);
+        }
+    </style>
 </head>
 <body>
-    <canvas id="chart" width="400" height="200"></canvas>
+    <header>
+        <h1>ESP32 Sensor Data Dashboard</h1>
+        <p>Monitoring Temperature and Humidity from Our Two ESP32 Devices</p>
+    </header>
+    <main>
+        <!-- ESP32 Device 1 -->
+        <div class="chart-container">
+            <h3>ESP32 Device 1 - Temperature & Humidity</h3>
+            <canvas id="chart1"></canvas>
+        </div>
+
+        <!-- ESP32 Device 2 -->
+        <div class="chart-container">
+            <h3>ESP32 Device 2 - Temperature & Humidity</h3>
+            <canvas id="chart2"></canvas>
+        </div>
+    </main>
     <script>
-        const ctx = document.getElementById('chart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Sensor Data',
-                    data: [],
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    x: {
-                        title: {
+        // Utility function to create a chart with two datasets
+        function createDualChart(ctx, temperatureData, humidityData) {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({ length: temperatureData.length }, (_, i) => i.toString()),
+                    datasets: [
+                        {
+                            label: 'Temperature (°C)',
+                            data: temperatureData,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            fill: false,
+                        },
+                        {
+                            label: 'Humidity (%)',
+                            data: humidityData,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
                             display: true,
-                            text: 'Time'
+                            position: 'top'
                         }
                     },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Value'
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            }
                         }
                     }
                 }
-            }
-        });
-
-        function fetchData() {
-            fetch('/data')
-                .then(response => response.json())
-                .then(data => {
-                    chart.data.labels = data.map((_, index) => index);
-                    chart.data.datasets[0].data = data;
-                    chart.update();
-                })
-                .catch(error => console.error('Error fetching data:', error));
+            });
         }
 
-        setInterval(fetchData, 1000);
+        // Function to update the chart with new data
+        function updateChart(chart, temperatureData, humidityData) {
+            chart.data.labels = Array.from({ length: temperatureData.length }, (_, i) => i.toString());
+            chart.data.datasets[0].data = temperatureData;
+            chart.data.datasets[1].data = humidityData;
+            chart.update();
+        }
+
+        // Initialize charts with dummy data
+        const chart1 = createDualChart(
+            document.getElementById('chart1').getContext('2d'),
+            [], // Temperature Data
+            []  // Humidity Data
+        );
+
+        const chart2 = createDualChart(
+            document.getElementById('chart2').getContext('2d'),
+            [], // Temperature Data
+            []  // Humidity Data
+        );
+
+        // Function to fetch data and update charts
+        async function fetchDataAndUpdateCharts() {
+            const response = await fetch('/data');
+            const data = await response.json();
+
+            const temperatureData1 = data.device_1.map(item => parseFloat(item.split('T: ')[1].split(' ')[0]));
+            const humidityData1 = data.device_1.map(item => parseFloat(item.split('H: ')[1].split(' ')[0]));
+
+            const temperatureData2 = data.device_2.map(item => parseFloat(item.split('T: ')[1].split(' ')[0]));
+            const humidityData2 = data.device_2.map(item => parseFloat(item.split('H: ')[1].split(' ')[0]));
+
+            updateChart(chart1, temperatureData1, humidityData1);
+            updateChart(chart2, temperatureData2, humidityData2);
+        }
+
+        // Fetch data and update charts every second
+        setInterval(fetchDataAndUpdateCharts, 1000);
     </script>
 </body>
 </html>
