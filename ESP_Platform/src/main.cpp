@@ -6,7 +6,7 @@
 #include <string.h>
 #include <Base64.h>
 #include <Wire.h>
-
+#include <SHA256.h>
 
 #include <Arduino.h>
 #include "DHT.h"
@@ -46,12 +46,29 @@ byte key[] = {0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
 Speck speck;
 
 // Auth Constants
-
+byte hmacKey[] = {0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
+                  0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
 
 // End Auth Constants
 
 
 // Auth Functions
+String generateHMAC(String message) {
+    SHA256 sha256;
+    sha256.resetHMAC(hmacKey, sizeof(hmacKey));
+    sha256.update(message.c_str(), message.length());
+    byte hmac[32];
+    sha256.finalizeHMAC(hmacKey, sizeof(hmacKey), hmac, sizeof(hmac));
+
+    String hmacStr = "";
+    for (uint8_t i = 0; i < 32; i++) {
+        if (hmac[i] < 16) {
+            hmacStr += "0"; // Add leading zero for single-digit hex numbers
+        }
+        hmacStr += String(hmac[i], HEX);
+    }
+    return hmacStr;
+}
 
 // End Auth
 String convertToBase64(String input) {
@@ -272,10 +289,17 @@ void loop() {
   String message = "Device 1: H: " + String(hmdt) + "  T: " + String(tmpr) + " Heat: " + String(hic);
   String cipherMSG = speck_enc(message);
   cipherMSG.trim();
-  Serial.println(cipherMSG);
+  // Serial.println(cipherMSG);
   Serial.println("Cipher length: " + String(cipherMSG.length()));
-  client.publish("sensor/data", (uint8_t*)cipherMSG.c_str(), cipherMSG.length());
+  // Generate HMAC for the message
+  String hmac = generateHMAC(cipherMSG);
+  // Combine the message and HMAC
+  String finalMessage = cipherMSG + ":" + hmac;
+
+
+  client.publish("sensor/data", (uint8_t*)finalMessage.c_str(), finalMessage.length());
   // client.publish("sensor/data", message.c_str());
+  Serial.println(finalMessage);
   digitalWrite(wLED,HIGH);
   delay(500);
   digitalWrite(wLED,LOW);

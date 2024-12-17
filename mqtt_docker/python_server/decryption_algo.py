@@ -2,8 +2,9 @@ import argparse
 from speck import SpeckCipher
 import base64
 
-# Define the 128-bit key used in Arduino code
-key = 0x0f0e0d0c0b0a09080706050403020100  # Convert the key to a 16-byte integer
+
+key = 0x0f0e0d0c0b0a09080706050403020100  
+hmackey =0x0f0e0d0c0b0a09080706050403020100
 
 # Function to convert hex string to bytes
 def hex_to_bytes(hex_str):
