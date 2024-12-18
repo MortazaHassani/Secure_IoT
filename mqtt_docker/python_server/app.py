@@ -2,7 +2,22 @@ from flask import Flask, render_template, jsonify
 from flask_mqtt import Mqtt
 from collections import deque
 import requests
-from decryption_algo import decrypt_msg  # Import the decrypt_msg function
+from datetime import datetime
+import re
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+from decryption_algo import decrypt_msg
+from verify import verify_challenge
+from csv_log import store_device_data_to_csv_async
+
+executor = ThreadPoolExecutor(max_workers=1)
+async_loop = asyncio.new_event_loop()
+def run_async(coro):
+    """Helper function to run coroutines in the background"""
+    asyncio.set_event_loop(async_loop)
+    return async_loop.run_until_complete(coro)
+    
 
 app = Flask(__name__)
 
@@ -46,31 +61,75 @@ def handle_connect(client, userdata, flags, rc):
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
     payload = message.payload.decode('utf-8')
-    print(f"Received payload: {payload}")  # Debugging line
+    print(f"Received payload: {payload}")
 
     try:
-        # Decrypt the payload
-        decrypted_payload = decrypt_msg(payload)
-        print(f"Decrypted payload: {decrypted_payload}")  # Debugging line
+        ciphertext, nonce = verify_challenge(payload)
+        if ciphertext:
+            decrypted_payload = decrypt_msg(ciphertext)
+            print(f"Decrypted payload: {decrypted_payload}")
 
-        # Determine the device and append to the corresponding deque
-        if 'Device 1' in decrypted_payload:
-            sensor_data_device_1.append(decrypted_payload)
-        elif 'Device 2' in decrypted_payload:
-            sensor_data_device_2.append(decrypted_payload)
-        print(f"Appended data: {decrypted_payload}")  # Debugging line
+            parsed_data = parse_sensor_data(decrypted_payload)
+            device_id = 'device01' if 'Device 1' in decrypted_payload else 'device02'
 
-    except ValueError as e:
-        print(f"Error processing payload: {e}")
-        send_telegram_alert(f"Error processing payload: {e}")
+            # Run async CSV writing in the thread pool
+            executor.submit(run_async, store_device_data_to_csv_async(device_id, parsed_data))
+
+            if 'Device 1' in decrypted_payload:
+                sensor_data_device_1.append(parsed_data)
+            elif 'Device 2' in decrypted_payload:
+                sensor_data_device_2.append(parsed_data)
+            print(f"Appended data: {parsed_data}")
+        else:
+            print("Not Authenticated")
     except Exception as e:
         print(f"Unexpected error: {e}")
         send_telegram_alert(f"Unexpected error: {e}")
 
 def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    requests.post(url, data=data)
+    # url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+    # requests.post(url, data=data)
+    pass
 
+def parse_sensor_data(data_string):
+    """
+    Parse sensor data string and return [timestamp, humidity, temperature, heat]
+
+    Args:
+        data_string (str): String in format "Device 1: H: 53.00  T: 21.80 Heat: 21.42"
+
+    Returns:
+        list: [timestamp, humidity, temperature, heat]
+    """
+    try:
+        # Regular expression pattern to extract values
+        pattern = r'H: (\d+\.\d+)\s+T: (\d+\.\d+)\s+Heat: (\d+\.\d+)'
+
+        # Find matches in the string
+        matches = re.search(pattern, data_string)
+
+        if matches:
+            timestamp = datetime.now().isoformat()
+            humidity = float(matches.group(1))
+            temperature = float(matches.group(2))
+            heat = float(matches.group(3))
+
+            return [timestamp, humidity, temperature, heat]
+        else:
+            raise ValueError("Could not parse sensor data string")
+
+    except Exception as e:
+        print(f"Error parsing sensor data: {e}")
+        return None
+
+def cleanup():
+    executor.shutdown(wait=True)
+    async_loop.close()
+
+# Modify your main block
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    try:
+        app.run(host='0.0.0.0', port=5000)
+    finally:
+        cleanup()

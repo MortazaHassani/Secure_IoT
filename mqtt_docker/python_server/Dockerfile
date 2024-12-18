@@ -5,15 +5,19 @@ WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
-# Make port 5000 available to the world outside this container
+# Make port 5000 available
 EXPOSE 5000
 
+# Copy all application files
 COPY . .
 
-# Define environment variable
+# Set environment variables for Python and Flask
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV FLASK_APP=app.py
+# For better logging in production
+ENV FLASK_ENV=production
 
-# Run app.py when the container launches
-CMD ["flask", "run", "--host=0.0.0.0"]
-
-#CMD ["python", "app.py"]
+# Run the application with Python directly instead of Flask CLI
+# This gives better control over the application and logging
+CMD ["python", "-u", "app.py"]
