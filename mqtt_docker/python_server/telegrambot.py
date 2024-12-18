@@ -4,7 +4,11 @@ import time
 import threading
 from dotenv import load_dotenv
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import io
 from datetime import datetime, timedelta
+from app import latest_readings_device_1, latest_readings_device_2
 
 load_dotenv()
 
@@ -50,7 +54,7 @@ def handle_options(message):
     elif message.text == 'update':
         if chat_id in logged_in_users:
             if chat_id not in update_threads or not update_threads[chat_id].is_alive():
-                bot.send_message(chat_id, "Starting updates... You will receive messages every 1 minute.")
+                bot.send_message(chat_id, "Starting updates...")
                 update_thread = threading.Thread(target=send_updates, args=(chat_id,), daemon=True)
                 update_thread.start()
                 update_threads[chat_id] = update_thread
@@ -99,13 +103,33 @@ def handle_password(message):
 
     user_states.pop(chat_id, None)  # Reset state
 
-# Send updates every 1 minute
 def send_updates(chat_id):
-    for _ in range(10):  # Limit to 10 updates for demonstration
-        if chat_id not in logged_in_users:
-            break
-        bot.send_message(chat_id, "This is an update message!")
-        time.sleep(60)  # Wait 1 minute between messages
+    while chat_id in logged_in_users:
+        try:
+            # Try to get latest readings from device 1
+            if not latest_readings_device_1.empty():
+                data = latest_readings_device_1.get()
+                timestamp, humidity, temperature, heat = data
+                message = (f"🔵 Device 1 Reading:\n"
+                          f"🌡️ Temperature: {temperature}°C\n"
+                          f"💧 Humidity: {humidity}%\n"
+                          f"🌡️ Heat Index: {heat}")
+                bot.send_message(chat_id, message)
+
+            # Try to get latest readings from device 2
+            if not latest_readings_device_2.empty():
+                data = latest_readings_device_2.get()
+                timestamp, humidity, temperature, heat = data
+                message = (f"🟢 Device 2 Reading:\n"
+                          f"🌡️ Temperature: {temperature}°C\n"
+                          f"💧 Humidity: {humidity}%\n"
+                          f"🌡️ Heat Index: {heat}")
+                bot.send_message(chat_id, message)
+
+        except Exception as e:
+            print(f"Error sending updates: {e}")
+
+        time.sleep(30)  # Wait for 1 minute before next update
 
 # Stop updates for a user
 def stop_updates(chat_id):
@@ -120,10 +144,61 @@ def wipe_history(chat_id):
 
 
 # Send chart as an image
+def generate_sensor_chart():
+    # Read the last 50 rows from the CSV file
+    csv_path = '/app/data/sensor_data.csv'
+    df = pd.read_csv(csv_path, names=['device', 'timestamp', 'humidity', 'temperature', 'heat'])
+    df = df.tail(50)
+
+    # Convert timestamp strings to datetime objects
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # Create figure and axis objects with a single subplot
+    plt.figure(figsize=(12, 6))
+
+    # Plot temperature, humidity, and heat index
+    plt.plot(df['timestamp'], df['temperature'], label='Temperature (°C)', color='red', marker='o')
+    plt.plot(df['timestamp'], df['humidity'], label='Humidity (%)', color='blue', marker='s')
+    plt.plot(df['timestamp'], df['heat'], label='Heat Index', color='green', marker='^')
+
+    # Customize the plot
+    plt.title('Sensor Data - Last 50 Readings', pad=20)
+    plt.xlabel('Time')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend()
+
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+
+    # Save the plot to a bytes buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    plt.close()
+
+    return buf
+
 def send_chart(chat_id):
-    # Send a static image (replace with a dynamic chart if needed)
-    with open('chart.png', 'rb') as photo:  # Ensure 'chart.png' exists in your directory
-        bot.send_photo(chat_id, photo, caption="Here is your chart!")
+    try:
+        # Generate the chart
+        chart_buffer = generate_sensor_chart()
+
+        # Send the chart
+        bot.send_photo(
+            chat_id, 
+            chart_buffer, 
+            caption="📊 Sensor Data Chart (Last 50 Readings)\n"
+                    "🔴 Temperature (°C)\n"
+                    "🔵 Humidity (%)\n"
+                    "🟢 Heat Index"
+        )
+
+    except Exception as e:
+        print(f"Error generating/sending chart: {e}")
+        bot.send_message(chat_id, "Sorry, there was an error generating the chart.")
 
 # Echo user messages (fallback)
 @bot.message_handler(func=lambda message: not message.text.startswith('/'))

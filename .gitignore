@@ -1,4 +1,7 @@
+.DS_Store
+.env
 _minted-report01
+
 
 Report/_minted-report
 Report/texput.log

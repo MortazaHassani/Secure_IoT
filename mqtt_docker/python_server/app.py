@@ -7,6 +7,9 @@ import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+import json
+from queue import Queue
+
 from decryption_algo import decrypt_msg
 from verify import verify_challenge
 from csv_log import store_device_data_to_csv_async
@@ -35,8 +38,9 @@ mqtt = Mqtt(app)
 sensor_data_device_1 = deque(maxlen=100)
 sensor_data_device_2 = deque(maxlen=100)
 
-TELEGRAM_BOT_TOKEN = 'your_telegram_bot_token'
-TELEGRAM_CHAT_ID = 'your_telegram_chat_id'
+latest_readings_device_1 = Queue()
+latest_readings_device_2 = Queue()
+__all__ = ['latest_readings_device_1', 'latest_readings_device_2']
 
 @app.route('/')
 def index():
@@ -56,7 +60,7 @@ def handle_connect(client, userdata, flags, rc):
         mqtt.subscribe('sensor/data')
     else:
         print(f"Failed to connect to MQTT broker, return code {rc}")
-        send_telegram_alert(f"Failed to connect to MQTT broker, return code {rc}")
+        #send_telegram_alert(f"Failed to connect to MQTT broker, return code {rc}")
 
 @mqtt.on_message()
 def handle_mqtt_message(client, userdata, message):
@@ -77,20 +81,21 @@ def handle_mqtt_message(client, userdata, message):
 
             if 'Device 1' in decrypted_payload:
                 sensor_data_device_1.append(parsed_data)
+                while not latest_readings_device_1.empty():
+                    latest_readings_device_1.get()
+                latest_readings_device_1.put(parsed_data)
             elif 'Device 2' in decrypted_payload:
                 sensor_data_device_2.append(parsed_data)
+                while not latest_readings_device_2.empty():
+                    latest_readings_device_2.get()
+                latest_readings_device_2.put(parsed_data)
             print(f"Appended data: {parsed_data}")
         else:
             print("Not Authenticated")
     except Exception as e:
         print(f"Unexpected error: {e}")
-        send_telegram_alert(f"Unexpected error: {e}")
 
-def send_telegram_alert(message):
-    # url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    # requests.post(url, data=data)
-    pass
+
 
 def parse_sensor_data(data_string):
     """

@@ -20,6 +20,8 @@ services:
       - "5000:5000"
     depends_on:
       - mosquitto
+    volumes:
+      - ./data:/app/data  # Mount the host directory to the container directory
     networks:
       - app_network
 
@@ -29,5 +31,3 @@ volumes:
 
 networks:
   app_network:
-
-

@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -20,4 +20,4 @@ ENV FLASK_ENV=production
 
 # Run the application with Python directly instead of Flask CLI
 # This gives better control over the application and logging
-CMD ["python", "-u", "app.py"]
+CMD ["python", "-u", "run.py"]
