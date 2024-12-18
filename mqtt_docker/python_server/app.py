@@ -23,6 +23,7 @@ def run_async(coro):
     
 
 app = Flask(__name__)
+app.config['PROPAGATE_EXCEPTIONS'] = True
 
 # Flask-MQTT Configuration
 app.config['MQTT_BROKER_URL'] = 'mosquitto'  # Service name from Docker Compose
@@ -52,6 +53,10 @@ def data():
         'device_1': list(sensor_data_device_1),
         'device_2': list(sensor_data_device_2)
     })
+
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy"}), 200
 
 @mqtt.on_connect()
 def handle_connect(client, userdata, flags, rc):

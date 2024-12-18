@@ -135,7 +135,7 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     // Connect without username and password
     
-    if (client.connect("ESP32Client01")) {
+    if (client.connect("ESP32Client02")) {
       Serial.println("Connected to MQTT broker");
       client.subscribe("sensor/data");  // Subscribe to the topic
       delay(1000);
@@ -313,7 +313,7 @@ void loop() {
   client.loop();
   
   // Publish a message to the topic every 5 seconds
-  String message = "Device 1: H: " + String(hmdt) + "  T: " + String(tmpr) + " Heat: " + String(hic);
+  String message = "Device 2: H: " + String(hmdt) + "  T: " + String(tmpr) + " Heat: " + String(hic);
   String cipherMSG = speck_enc(message);
   cipherMSG.trim();
   
