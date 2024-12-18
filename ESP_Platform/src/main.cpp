@@ -15,7 +15,7 @@
 #include <PubSubClient.h>
 
 // Auth Lib
-
+#include "bootloader_random.h" 
 // End Auth Lib
 
 // WiFi settings
@@ -47,13 +47,31 @@ Speck speck;
 
 // Auth Constants
 byte hmacKey[] = {0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
-                  0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
+                  0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0xbc, 0xfe};
 
+const int nonceLength = 16;
+  uint8_t nonceRandom[nonceLength];
 // End Auth Constants
 
 
 // Auth Functions
-String generateHMAC(String message) {
+const char base36Chars[36] PROGMEM = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
+String uint8ArrayToHexString(const uint8_t *uint8Array, const uint32_t arrayLength) {
+  String hexString;
+  if (!hexString.reserve(2 * arrayLength))  // Each uint8_t will become two characters (00 to FF)
+  {
+    return emptyString;
+  }
+
+  for (uint32_t i = 0; i < arrayLength; ++i) {
+    hexString += (char)pgm_read_byte(base36Chars + (uint8Array[i] >> 4));
+    hexString += (char)pgm_read_byte(base36Chars + uint8Array[i] % 16);
+  }
+
+  return hexString;
+}
+
+String generateHMAC(String message, uint8_t *data_random, int data_randomLength) {
     SHA256 sha256;
     sha256.resetHMAC(hmacKey, sizeof(hmacKey));
     sha256.update(message.c_str(), message.length());
@@ -67,6 +85,9 @@ String generateHMAC(String message) {
         }
         hmacStr += String(hmac[i], HEX);
     }
+    // String ESPID = "|ESP_01";
+
+    hmacStr += "|" + uint8ArrayToHexString(data_random, data_randomLength);
     return hmacStr;
 }
 
@@ -114,7 +135,7 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     // Connect without username and password
     
-    if (client.connect("ESP32Client")) {
+    if (client.connect("ESP32Client01")) {
       Serial.println("Connected to MQTT broker");
       client.subscribe("sensor/data");  // Subscribe to the topic
       delay(1000);
@@ -129,9 +150,15 @@ void reconnect() {
 
 void setup() {
   Serial.begin(9600);
+
+  //Auth
+  bootloader_random_enable();
+  
+
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
+  client.setBufferSize(512);
 
   dht.begin();
   
@@ -264,7 +291,7 @@ String speck_enc(String dataPacket)
 }
 
 void loop() {
-
+  bootloader_fill_random(nonceRandom, nonceLength);
   //  start = millis();
   digitalWrite(rLED,LOW);
   if (digitalRead(pButton1)==1){
@@ -289,17 +316,35 @@ void loop() {
   String message = "Device 1: H: " + String(hmdt) + "  T: " + String(tmpr) + " Heat: " + String(hic);
   String cipherMSG = speck_enc(message);
   cipherMSG.trim();
-  // Serial.println(cipherMSG);
+  
+  Serial.println("Cipher message: " + cipherMSG);
   Serial.println("Cipher length: " + String(cipherMSG.length()));
+  
   // Generate HMAC for the message
-  String hmac = generateHMAC(cipherMSG);
-  // Combine the message and HMAC
-  String finalMessage = cipherMSG + ":" + hmac;
+  String hmac = generateHMAC(cipherMSG, nonceRandom, nonceLength);
+  
+  // Add debug print for HMAC
+  Serial.println("HMAC: " + hmac);
+  Serial.println("HMAC length: " + String(hmac.length()));
+  
+  // Try concatenating in steps
+  String finalMessage = "";
+  finalMessage.reserve(cipherMSG.length() + hmac.length() + 2); // Reserve memory for the full message
+  finalMessage += cipherMSG;
+  finalMessage += "|";
+  finalMessage += hmac;
+  
+  // Debug print final message
+  Serial.println("Final message length: " + String(finalMessage.length()));
+  
+  // Check if the message is not empty before publishing
+  if(finalMessage.length() > 0) {
+    client.publish("sensor/data", (uint8_t*)finalMessage.c_str(), finalMessage.length());
+    Serial.println("Published message: " + finalMessage);
+  } else {
+    Serial.println("Error: Empty message");
+  }
 
-
-  client.publish("sensor/data", (uint8_t*)finalMessage.c_str(), finalMessage.length());
-  // client.publish("sensor/data", message.c_str());
-  Serial.println(finalMessage);
   digitalWrite(wLED,HIGH);
   delay(500);
   digitalWrite(wLED,LOW);
