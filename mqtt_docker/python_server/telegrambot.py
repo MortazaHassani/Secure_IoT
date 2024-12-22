@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 from datetime import datetime, timedelta
-from app import latest_readings_device_1, latest_readings_device_2
+#from app import latest_readings_device_1, latest_readings_device_2
 
 load_dotenv()
 
@@ -106,30 +106,34 @@ def handle_password(message):
 def send_updates(chat_id):
     while chat_id in logged_in_users:
         try:
-            # Try to get latest readings from device 1
-            if not latest_readings_device_1.empty():
-                data = latest_readings_device_1.get()
-                timestamp, humidity, temperature, heat = data
-                message = (f"🔵 Device 1 Reading:\n"
-                          f"🌡️ Temperature: {temperature}°C\n"
-                          f"💧 Humidity: {humidity}%\n"
-                          f"🌡️ Heat Index: {heat}")
-                bot.send_message(chat_id, message)
+            # Read the last row from the CSV file
+            csv_path = '/app/data/sensor_data.csv'
+            df = pd.read_csv(csv_path, names=['device', 'timestamp', 'humidity', 'temperature', 'heat'])
+            last_row = df.iloc[-1]  # Get the last row
 
-            # Try to get latest readings from device 2
-            if not latest_readings_device_2.empty():
-                data = latest_readings_device_2.get()
-                timestamp, humidity, temperature, heat = data
-                message = (f"🟢 Device 2 Reading:\n"
-                          f"🌡️ Temperature: {temperature}°C\n"
-                          f"💧 Humidity: {humidity}%\n"
-                          f"🌡️ Heat Index: {heat}")
-                bot.send_message(chat_id, message)
+            # Format the message based on the device
+            device = last_row['device']
+            timestamp = last_row['timestamp']
+            humidity = last_row['humidity']
+            temperature = last_row['temperature']
+            heat = last_row['heat']
+
+            # Create different emoji for different devices
+            device_emoji = "🔵" if device == "device01" else "🟢"
+
+            message = (f"{device_emoji} {device} Reading:\n"
+                      f"⏰ Time: {timestamp}\n"
+                      f"🌡️ Temperature: {temperature}°C\n"
+                      f"💧 Humidity: {humidity}%\n"
+                      f"🌡️ Heat Index: {heat}")
+
+            bot.send_message(chat_id, message)
 
         except Exception as e:
             print(f"Error sending updates: {e}")
+            bot.send_message(chat_id, "Error reading sensor data.")
 
-        time.sleep(30)  # Wait for 1 minute before next update
+        time.sleep(30)  # Wait for 30 seconds before next update
 
 # Stop updates for a user
 def stop_updates(chat_id):
@@ -205,5 +209,7 @@ def send_chart(chat_id):
 def echo_all(message):
     bot.reply_to(message, message.text)
 
-# Infinite polling to handle incoming messages
-bot.infinity_polling()
+__all__ = ['bot']
+if __name__ == "__main__":
+    # Infinite polling to handle incoming messages
+    bot.infinity_polling()

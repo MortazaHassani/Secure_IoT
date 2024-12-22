@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import json
 from queue import Queue
-
+from telegrambot import bot
 from decryption_algo import decrypt_msg
 from verify import verify_challenge
 from csv_log import store_device_data_to_csv_async
@@ -25,6 +25,15 @@ def run_async(coro):
 app = Flask(__name__)
 app.config['PROPAGATE_EXCEPTIONS'] = True
 
+def run_telegram_bot():
+    """Function to run the Telegram bot"""
+    try:
+        print("Starting Telegram bot...")
+        bot.infinity_polling(timeout=20, long_polling_timeout=10)
+    except Exception as e:
+        print(f"Telegram bot error: {e}")
+        
+        
 # Flask-MQTT Configuration
 app.config['MQTT_BROKER_URL'] = 'mosquitto'  # Service name from Docker Compose
 app.config['MQTT_BROKER_PORT'] = 1883
@@ -137,9 +146,16 @@ def cleanup():
     executor.shutdown(wait=True)
     async_loop.close()
 
-# Modify your main block
 if __name__ == '__main__':
     try:
+        # Start Telegram bot in a separate thread
+        telegram_thread = threading.Thread(target=run_telegram_bot, daemon=True)
+        telegram_thread.start()
+        print("Telegram bot thread started")
+
+        # Run Flask app
         app.run(host='0.0.0.0', port=5000)
+    except KeyboardInterrupt:
+        print("Shutting down...")
     finally:
         cleanup()
